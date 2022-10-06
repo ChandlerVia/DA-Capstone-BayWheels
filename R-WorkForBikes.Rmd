@@ -1,0 +1,102 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+filelist = c("202109-baywheels-tripdata.csv", "202110-baywheels-tripdata.csv", "202111-baywheels-tripdata.csv"
+  , "202112-baywheels-tripdata.csv", "202201-baywheels-tripdata.csv", "202202-baywheels-tripdata.csv"
+  , "202203-baywheels-tripdata.csv", "202204-baywheels-tripdata.csv", "202205-baywheels-tripdata.csv"
+  , "202206-baywheels-tripdata.csv", "202207-baywheels-tripdata.csv")
+BayWheels <- read.csv("202108-baywheels-tripdata.csv", header=TRUE)
+
+for (filename in filelist) {
+  temp <- read.csv(filename, header=TRUE)
+  print(filename)
+  print(dim(temp))
+  BayWheels <- rbind(BayWheels, temp)
+}
+
+head(BayWheels)
+summary(BayWheels)
+```
+
+``` {r}
+library(Hmisc)
+head(BayWheels)
+describe(BayWheels)
+
+library('dplyr')
+BayWheelsSample <- sample_frac(BayWheels, size = .001, replace = FALSE)
+```
+
+```{r}
+#library("plyr")
+BayWheels.stations <- count(BayWheels, 'start_station_name')
+BayWheels.stations["AvgDailyUse"] <- round(BayWheels.stations["freq"] / 365, digits = 2)
+BayWheels.stations 
+
+Temp <- aggregate(x = BayWheels$start_lat,                # Specify data column
+          by = list(BayWheels$start_station_name),              # Specify group indicator
+          FUN = mean) 
+names(Temp)[names(Temp) == "Group.1"] <- "start_station_name"
+names(Temp)[names(Temp) == "x"] <- "start_lat"
+BayWheels.stations <- merge(BayWheels.stations, Temp)
+
+Temp <- aggregate(x = BayWheels$start_lng,                # Specify data column
+          by = list(BayWheels$start_station_name),              # Specify group indicator
+          FUN = mean) 
+names(Temp)[names(Temp) == "Group.1"] <- "start_station_name"
+names(Temp)[names(Temp) == "x"] <- "start_lng"
+BayWheels.stations <- merge(BayWheels.stations, Temp)
+
+BayWheels.stations <- BayWheels.stations[!(is.na(BayWheels.stations$start_station_name) | BayWheels.stations$start_station_name==""), ]
+BayWheels.stations
+```
+```{r}
+library(factoextra)
+ 
+df <- BayWheels.stations[,c("start_lng", "start_lat")]
+df
+df <- na.omit(df)
+df <- scale(df)
+png(file = "KMeansExample.png")
+km <- kmeans(df, centers = 4, nstart = 25)
+fviz_cluster(km, data = df)
+dev.off()
+km <- kmeans(df, centers = 5, nstart = 25)
+fviz_cluster(km, data = df)
+
+BayWheels.stations <- cbind(BayWheels.stations, cluster = km$cluster)
+
+BayWheels.stations
+
+write.csv(BayWheels.stations, "BayWheels-Stations-clustered.csv")
+```
+
+
+
+```{r}
+library(ggplot2)
+library(ggmap)
+library(RColorBrewer)
+
+register_google(key = "DISABLED", write = TRUE)
+
+SF.map <- get_map(location= 'san francisco', 
+                       maptype='roadmap', color='bw',source='google',zoom=9)
+
+ggmap(SF.map) + 
+  geom_point(data=BayWheels.stations, aes(x=start_lng,y=start_lat, color=cluster),size=2)+
+  theme(axis.ticks = element_blank(), axis.text = element_blank())+
+  xlab('')+ylab('')
+
+ ggmap(SF.map) + 
+  geom_point(data=BayWheels.stations,aes(x=start_lng,y=start_lat,color=freq),size=1,alpha=0.75)+
+  scale_colour_gradient(high="red",low='green')+ 
+  theme(axis.ticks = element_blank(),axis.text = element_blank())+
+  xlab('')+ylab('')
+
+```
+
+
